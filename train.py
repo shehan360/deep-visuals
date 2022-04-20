@@ -41,7 +41,7 @@ class VideoDiffusion(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         loss = self.training_step(batch, batch_idx)
-        self.log('val/loss', loss, prog_bar=True)
+        self.log("val/loss", loss, on_step=True, on_epoch=True, sync_dist=True)
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), self.args.lr)
@@ -71,24 +71,19 @@ def main():
     data.train_dataloader()
     data.test_dataloader()
 
-    if args.ckpt_path:
-        print("Loading from checkpoint!!!")
-        model = VideoDiffusion.load_from_checkpoint(args.ckpt_path)
-    else:
-        model = VideoDiffusion(args)
+    model = VideoDiffusion(args)
 
     callbacks = []
     callbacks.append(ModelCheckpoint(monitor='val/loss', mode='min', save_top_k=-1))
 
-    kwargs = dict()
-    if args.gpus > 1:
-        # find_unused_parameters = False to support gradient checkpointing
-        kwargs = dict(distributed_backend='ddp', gpus=args.gpus,
-                      plugins=[pl.plugins.DDPPlugin(find_unused_parameters=False)])
     trainer = pl.Trainer.from_argparse_args(args, callbacks=callbacks,
-                                            max_steps=args.max_steps, **kwargs)
+                                            max_steps=args.max_steps)
 
-    trainer.fit(model, data)
+    if args.ckpt_path:
+        print("Loading from checkpoint!!!")
+        trainer.fit(model, data, ckpt_path=args.ckpt_path)
+    else:
+        trainer.fit(model, data)
 
 
 if __name__ == '__main__':
