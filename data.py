@@ -1,15 +1,13 @@
-import os
 import os.path as osp
 import math
-import random
 import pickle
 import warnings
 
 import glob
-import h5py
 import numpy as np
+from pydub import AudioSegment
+from librosa.util import fix_length
 
-import torch
 import torch.utils.data as data
 import torch.nn.functional as F
 import torch.distributed as dist
@@ -66,9 +64,23 @@ class VideoDataset(data.Dataset):
         resolution = self.resolution
         video, _, _, idx = self._clips.get_clip(idx)
 
+        audio_segment = AudioSegment.from_file(self._clips.video_paths[idx], "mp4")
+        audio_segment = audio_segment.set_channels(1)
+        audio_segment = audio_segment.set_frame_rate(22050)
+
+        channel_sounds = audio_segment.split_to_mono()
+        samples = [s.get_array_of_samples() for s in channel_sounds]
+
+        audio = np.array(samples).T.astype(np.float32)
+        audio /= np.iinfo(samples[0].typecode).max
+        audio = audio.reshape(-1)
+        audio = fix_length(audio, size=5 * 22050)
+        audio *= 256.0
+        audio = np.reshape(audio, (1, -1, 1))
+
         class_name = get_parent_dir(self._clips.video_paths[idx])
         label = self.class_to_label[class_name]
-        return dict(video=preprocess(video, resolution), label=label)
+        return dict(video=preprocess(video, resolution), label=label, audio=audio)
 
 
 def get_parent_dir(path):
