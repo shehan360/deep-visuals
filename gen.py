@@ -1,15 +1,13 @@
 import torch
 import argparse
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelCheckpoint
-from video_diffusion_pytorch import Unet3D, GaussianDiffusion
-import torch.optim.lr_scheduler as lr_scheduler
-from data import VideoData
 from matplotlib import pyplot as plt
 from matplotlib import animation
 from VideoDiffusion import VideoDiffusion
-
-
+from pydub import AudioSegment
+import os
+import numpy as np
+from librosa.util import fix_length
 
 pl.seed_everything(1234)
 
@@ -23,19 +21,40 @@ parser.add_argument('--batch_size', type=int, default=8)
 parser.add_argument('--num_workers', type=int, default=8)
 parser.add_argument('--lr', type=float, default=2e-5)
 parser.add_argument('--ckpt_path', type=str)
+parser.add_argument('--cond_data', type=str, default="visuals-dataset-validate24/validate")
 args = parser.parse_args()
 
 kwargs = {'args': args}
-model = VideoDiffusion.load_from_checkpoint(checkpoint_path='epoch=0-step=94217.ckpt', **kwargs)
+model = VideoDiffusion.load_from_checkpoint(checkpoint_path=args.ckpt_path, **kwargs)
 
+videos = os.listdir(args.cond_data)
+count = 0
+audio_arr = []
+for video_name in sorted(videos):
+    if video_name.endswith('mp4'):
+        audio_segment = AudioSegment.from_file(args.cond_data + "/" + video_name, "mp4")
+        audio_segment = audio_segment.set_channels(1)
+        audio_segment = audio_segment.set_frame_rate(22050)
 
+        channel_sounds = audio_segment.split_to_mono()
+        samples = [s.get_array_of_samples() for s in channel_sounds]
 
-videos = model.diffusion.sample(batch_size=4)
+        audio = np.array(samples).T.astype(np.float32)
+        audio /= np.iinfo(samples[0].typecode).max
+        audio = audio.reshape(-1)
+        audio = fix_length(audio, size=5 * 22050)
+        audio *= 256.0
+        audio = np.reshape(audio, (1, -1, 1))
+        audio_arr.append(torch.Tensor(audio))
+
+audio_cond = torch.cat(audio_arr).unsqueeze(dim=1)
+audio_embedding = model.get_audio_embedding(audio_cond)
+
+videos = model.diffusion.sample(batch_size=4, cond=audio_embedding)
 
 videos = ((videos + 0.5) * 255).cpu().numpy().astype('uint8')
 
 fig = plt.figure()
-plt.title('real (left), reconstruction (right)')
 plt.axis('off')
 im = plt.imshow(videos[0, :, :, :])
 

@@ -29,6 +29,13 @@ class VideoDiffusion(pl.LightningModule):
             loss_type=args.loss  # L1 or L2
         )
 
+    def get_audio_embedding(self, audio):
+        audio_embedding = self.soundNet(audio)
+        audio_embedding = torch.nn.functional.max_pool2d(audio_embedding.squeeze(), 2)
+        audio_embedding = torch.flatten(audio_embedding, start_dim=1)
+        audio_embedding = self.audio_lin(audio_embedding)
+        return audio_embedding
+
     def forward(self, video, audio):
         audio_embedding = self.soundNet(audio)
         audio_embedding = torch.nn.functional.max_pool2d(audio_embedding.squeeze(), 2)
