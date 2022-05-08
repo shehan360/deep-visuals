@@ -14,6 +14,7 @@ import torch.distributed as dist
 from torchvision.datasets.video_utils import VideoClips
 import pytorch_lightning as pl
 
+import random
 
 class VideoDataset(data.Dataset):
     """ Generic dataset for videos files stored in folders
@@ -36,7 +37,7 @@ class VideoDataset(data.Dataset):
         folder = osp.join(data_folder, 'train' if train else 'test')
         files = sum([glob.glob(osp.join(folder, '**', f'*.{ext}'), recursive=True)
                      for ext in self.exts], [])
-
+        files.sort()
         # hacky way to compute # of classes (count # of unique parent directories)
         self.classes = list(set([get_parent_dir(f) for f in files]))
         self.classes.sort()
@@ -62,7 +63,13 @@ class VideoDataset(data.Dataset):
 
     def __getitem__(self, idx):
         resolution = self.resolution
-        video, _, _, idx = self._clips.get_clip(idx)
+        idx = idx % len(self._clips.clips)
+        if idx == 0:
+            start_val = 0
+        else:
+            start_val = self._clips.cumulative_sizes[idx-1]
+        sample_idx = random.randint(start_val, self._clips.cumulative_sizes[idx]-1)
+        video, _, _, idx = self._clips.get_clip(sample_idx)
 
         audio_segment = AudioSegment.from_file(self._clips.video_paths[idx], "mp4")
         audio_segment = audio_segment.set_channels(1)
@@ -151,7 +158,7 @@ class VideoData(pl.LightningDataModule):
             num_workers=self.args.num_workers,
             pin_memory=True,
             sampler=sampler,
-            shuffle=sampler is None
+            shuffle=False
         )
         return dataloader
 

@@ -4,6 +4,7 @@ import torch.optim.lr_scheduler as lr_scheduler
 import pytorch_lightning as pl
 from SoundNet import SoundNet
 import torch
+from transformers import TransfoXLConfig, TransfoXLModel
 
 class VideoDiffusion(pl.LightningModule):
     def __init__(self, args):
@@ -12,8 +13,14 @@ class VideoDiffusion(pl.LightningModule):
 
         # Audio
         self.soundNet = SoundNet()
-        self.soundNet.load_state_dict(torch.load('soundnet8_final.pth'))
+        self.soundNet.load_state_dict(torch.load('soundnet.pth'))
         self.audio_lin = torch.nn.Linear(1024, 512)
+
+        #Transformer
+        configuration = TransfoXLConfig(d_model=512, d_embed=512, n_head=8, d_head=64, d_inner=2048, n_layer=12,
+                                        mem_len=512)
+        self.transformer = TransfoXLModel(configuration)
+
 
         model = Unet3D(
             dim=64,
@@ -41,7 +48,10 @@ class VideoDiffusion(pl.LightningModule):
         audio_embedding = torch.nn.functional.max_pool2d(audio_embedding.squeeze(), 2)
         audio_embedding = torch.flatten(audio_embedding, start_dim=1)
         audio_embedding = self.audio_lin(audio_embedding)
-        loss = self.diffusion(video, cond=audio_embedding)
+
+        audio_tansfomed_embedding = self.transformer(inputs_embeds=audio_embedding.unsqueeze(0))
+
+        loss = self.diffusion(video, cond=audio_tansfomed_embedding['last_hidden_state'].squeeze())
         return loss
 
     def training_step(self, batch, batch_idx):
