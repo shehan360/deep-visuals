@@ -69,10 +69,10 @@ class VideoDataset(data.Dataset):
         else:
             start_val = self._clips.cumulative_sizes[idx-1]
         end_val = self._clips.cumulative_sizes[idx] - 1
-        if start_val != end_val:
+        try:
             sample_idx = random.randint(start_val, end_val)
-        else:
-            sample_idx = random.randint(start_val, self._clips.cumulative_sizes[idx])
+        except ValueError:
+            sample_idx = start_val
 
         video, _, _, idx = self._clips.get_clip(sample_idx)
 
