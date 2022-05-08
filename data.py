@@ -73,6 +73,8 @@ class VideoDataset(data.Dataset):
             sample_idx = random.randint(start_val, end_val)
         except ValueError:
             sample_idx = start_val
+            if len(self._clips) == sample_idx:
+                sample_idx -= 1
 
         video, _, _, idx = self._clips.get_clip(sample_idx)
 
