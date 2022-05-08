@@ -68,7 +68,12 @@ class VideoDataset(data.Dataset):
             start_val = 0
         else:
             start_val = self._clips.cumulative_sizes[idx-1]
-        sample_idx = random.randint(start_val, self._clips.cumulative_sizes[idx]-1)
+        end_val = self._clips.cumulative_sizes[idx] - 1
+        if start_val != end_val:
+            sample_idx = random.randint(start_val, end_val)
+        else:
+            sample_idx = random.randint(start_val, self._clips.cumulative_sizes[idx])
+
         video, _, _, idx = self._clips.get_clip(sample_idx)
 
         audio_segment = AudioSegment.from_file(self._clips.video_paths[idx], "mp4")
